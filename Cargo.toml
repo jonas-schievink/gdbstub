@@ -1,0 +1,15 @@
+[package]
+name = "gdbstub"
+version = "0.1.0"
+authors = ["Jonas Schievink <jonas@schievink.net>"]
+description = """
+Implementation of a GDB server using the remote serial protocol (rsp) / gdbstub
+"""
+license = "CC0"
+
+[dependencies]
+log = "0.4.5"
+byteorder = "1.2.6"
+
+[dev-dependencies]
+env_logger = "0.5.13"
