@@ -24,6 +24,28 @@ struct DummyTarget<'a> {
     mem: &'a mut [u8],
 }
 
+impl<'a> DummyTarget<'a> {
+    fn step(&mut self) -> bool {    // `true` = stop
+        // Do a bit of fake-execution, skipping `nop`s and looping back around
+        // the memory. 0xCC = int3, a breakpoint that returns control back to
+        // the debugger.
+        match self.mem[self.eip as usize] {
+            0x90 => {
+                self.eip = (self.eip + 1) % self.mem.len() as u32;
+                false
+            },
+            0xCC => {   // int3
+                eprintln!("Hit breakpoint! Returning control to debugger.");
+                true
+            }
+            invalid => {
+                eprintln!("Invalid opcode: {:#04X}", invalid);
+                true
+            }
+        }
+    }
+}
+
 impl<'a> StubCalls for DummyTarget<'a> {
     type Target = x86::I386;
 
@@ -45,6 +67,7 @@ impl<'a> StubCalls for DummyTarget<'a> {
             es: 0,
             fs: 0,
             gs: 0,
+
             st0: [0; 10],
             st1: [0; 10],
             st2: [0; 10],
@@ -92,19 +115,11 @@ impl<'a> StubCalls for DummyTarget<'a> {
     }
 
     fn cont(&mut self) {
-        loop {
-            match self.mem[self.eip as usize] {
-                0x90 => self.eip += 1,
-                0xCC => {   // int3
-                    eprintln!("Hit breakpoint! Returning control to debugger.");
-                    break;
-                }
-                invalid => {
-                    eprintln!("Invalid opcode: {:#04X}", invalid);
-                    break;
-                }
-            }
-        }
+        while !self.step() {}
+    }
+
+    fn step(&mut self) {
+        self.step();
     }
 }
 

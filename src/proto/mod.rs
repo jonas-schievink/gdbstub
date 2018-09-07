@@ -44,6 +44,8 @@ pub enum Command<'a> {
     /// Note that this command can specify an optional address to start
     /// execution at. This is not yet implemented.
     Continue,
+    /// `s` - Execute the next instruction, then return.
+    Step,
 }
 
 impl<'a> Command<'a> {
@@ -111,6 +113,13 @@ impl<'a> Command<'a> {
                 }
 
                 Ok(Command::Continue)
+            }
+            b's' => {
+                if buf.len() > 1 {
+                    return Err(ParseError::Unsupported);
+                }
+
+                Ok(Command::Step)
             }
             // FIXME reject trailing data
             b'?' => Ok(Command::GetHaltReason),

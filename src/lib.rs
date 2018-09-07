@@ -57,6 +57,10 @@ pub trait StubCalls {
     /// breakpoint is hit.
     fn cont(&mut self);
 
+    /// Execute the next instruction of the target program and return control to
+    /// the debugger.
+    fn step(&mut self);
+
     /// Kill the target program / system.
     ///
     /// This doesn't need to be implemented. GDB sends this when closing the
@@ -219,6 +223,14 @@ impl<C: Comm, T: StubCalls> GdbStub<C, T> {
             }
             Command::Continue => {
                 self.target.cont();
+
+                let mut resp = ResponseWriter::new(&mut self.comm)?;
+                resp.write_all(b"S05").map_err(Error::comm)?; // 05 is apparently the trap signal
+                resp.finish()?;
+                Ok(())
+            }
+            Command::Step => {
+                self.target.step();
 
                 let mut resp = ResponseWriter::new(&mut self.comm)?;
                 resp.write_all(b"S05").map_err(Error::comm)?; // 05 is apparently the trap signal
