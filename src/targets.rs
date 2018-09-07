@@ -6,10 +6,12 @@ use byteorder::ByteOrder;
 
 macro_rules! def_regs {
     (
+        $( #[$attr:meta] )*
         pub struct $name:ident {
             $( $reg:ident : $t:ty, )+
         }
     ) => {
+        $( #[$attr] )*
         #[derive(Debug)]
         pub struct $name {
             $( pub $reg: $t, )+
@@ -58,6 +60,22 @@ impl EncodeRegister for u32 {
     }
 }
 
+impl EncodeRegister for u64 {
+    fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
+        let mut buf = [0; 8];
+        B::write_u64(&mut buf, *self);
+        comm.write_all_hex(&buf)
+    }
+}
+
+impl EncodeRegister for u128 {
+    fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
+        let mut buf = [0; 16];
+        B::write_u128(&mut buf, *self);
+        comm.write_all_hex(&buf)
+    }
+}
+
 impl EncodeRegister for [u8; 10] {
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
         // FIXME swap endianness?
@@ -83,6 +101,11 @@ pub mod x86 {
     }
 
     def_regs! {
+        /// Register contents of a 32-bit x86 processor.
+        ///
+        /// This assumes SSE support. If your target doesn't support SSE, leave
+        /// the registers set to 0.
+        // FIXME: There's probably a difference between 0 and "not transmitted"
         pub struct X86Registers {
             eax: u32,
             ebx: u32,
@@ -118,6 +141,16 @@ pub mod x86 {
             foseg: u32,
             fooff: u32,
             fop: u32,
+
+            xmm0: u128,
+            xmm1: u128,
+            xmm2: u128,
+            xmm3: u128,
+            xmm4: u128,
+            xmm5: u128,
+            xmm6: u128,
+            xmm7: u128,
+            mxcsr: u32,
         }
     }
     // FIXME how to handle extensions like MMX/SSE/...?

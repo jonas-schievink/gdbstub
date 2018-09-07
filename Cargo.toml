@@ -9,7 +9,7 @@ license = "CC0"
 
 [dependencies]
 log = "0.4.5"
-byteorder = "1.2.6"
+byteorder = { version = "1.2.6", features = ["i128"] }
 
 [dev-dependencies]
 env_logger = "0.5.13"

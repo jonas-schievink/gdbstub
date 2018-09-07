@@ -61,6 +61,16 @@ impl<'a> StubCalls for DummyTarget<'a> {
             foseg: 0,
             fooff: 0,
             fop: !0,
+
+            xmm0: 0,
+            xmm1: 0,
+            xmm2: 0,
+            xmm3: 0,
+            xmm4: 0,
+            xmm5: 0,
+            xmm6: 0,
+            xmm7: 0,
+            mxcsr: !0,
         }
     }
 
