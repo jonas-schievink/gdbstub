@@ -3,10 +3,12 @@ use std::{str, u64};
 use std::str::Utf8Error;
 use std::num::{ParseIntError, NonZeroU32};
 
+/// A thread-directed action to perform.
 #[derive(Debug)]
 pub enum ThreadAction {
     /// Continue / Step.
     ContStep,
+    /// Memory/Register access, any other operation.
     Other,
 }
 
@@ -25,14 +27,23 @@ pub enum Command<'a> {
         start: u64,
         len: u64,
     },
+    /// `M` - Write data to memory.
     WriteMem {
+        /// Start address to be written.
         start: u64,
+        /// The bytes to write to memory.
         bytes: &'a [u8],
     },
+    /// `H` - Set the active thread for an action.
     SetThread {
         action: ThreadAction,
         thread: ThreadId,
     },
+    /// `c` - Continue execution.
+    ///
+    /// Note that this command can specify an optional address to start
+    /// execution at. This is not yet implemented.
+    Continue,
 }
 
 impl<'a> Command<'a> {
@@ -56,7 +67,7 @@ impl<'a> Command<'a> {
                 }
             }
             m @ b'm' | m @ b'M' => {
-                let mut parts = buf[1..].splitn_mut(3, |b| *b == b',');
+                let mut parts = buf[1..].splitn_mut(3, |b| *b == b',' || *b == b':');
                 let start = u64::from_str_radix(str::from_utf8(parts.next().unwrap())?, 16)?;
                 let len = u64::from_str_radix(str::from_utf8(parts.next().ok_or(ParseError::Malformed)?)?, 16)?;
 
@@ -94,6 +105,14 @@ impl<'a> Command<'a> {
 
                 Ok(Command::SetThread { action, thread })
             }
+            b'c' => {
+                if buf.len() > 1 {
+                    return Err(ParseError::Unsupported);
+                }
+
+                Ok(Command::Continue)
+            }
+            // FIXME reject trailing data
             b'?' => Ok(Command::GetHaltReason),
             b'g' => Ok(Command::ReadRegisters),
             b'k' => Ok(Command::Kill),

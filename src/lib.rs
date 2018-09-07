@@ -47,11 +47,17 @@ pub trait StubCalls {
 
     /// Writes a byte to the target system's memory.
     ///
+    /// This is used to manually modify memory and to insert breakpoints.
+    ///
     /// Returns an error if `addr` does not point to valid memory. However, if
     /// `addr` is read-only memory, an attempt should be made to modify the
     /// memory anyways (eg. by temporarily remapping the containing page as
     /// writeable).
     fn write_mem(&mut self, addr: u64, byte: u8) -> Result<(), ()>;
+
+    /// Continue running the target program until a signal is received or a
+    /// breakpoint is hit.
+    fn cont(&mut self);
 
     /// Kill the target program / system.
     ///
@@ -166,17 +172,20 @@ impl<C: Comm, T: StubCalls> GdbStub<C, T> {
                         match Command::parse(&mut buf) {
                             Ok(cmd) => {
                                 trace!("{:?}", cmd);
-                                match self.handle_cmd(cmd) {
-                                    Err(Error::Killed) => Ok(()),
-                                    other => other,
-                                }
+                                self.handle_cmd(cmd)
                             }
                             Err(ParseError::Unsupported) => self.write_response(|_| Ok(())),
                             Err(ParseError::Malformed) => Err(Error::Malformed),
                         }
                     }();
                     self.buf = buf;
-                    result?;
+                    match result {
+                        Err(Error::Killed) => {
+                            info!("debugger killed connection");
+                            return Ok(());
+                        },
+                        res => res?,    // Ok => continue
+                    }
                 },
                 b'+' => {}
                 b'-' => return Err(Error::Nack),
@@ -207,6 +216,14 @@ impl<C: Comm, T: StubCalls> GdbStub<C, T> {
 
                 let mut resp = ResponseWriter::new(&mut self.comm)?;
                 resp.write_all(b"OK").map_err(Error::comm)?;
+                resp.finish()?;
+                Ok(())
+            }
+            Command::Continue => {
+                self.target.cont();
+
+                let mut resp = ResponseWriter::new(&mut self.comm)?;
+                resp.write_all(b"S05").map_err(Error::comm)?; // 05 is apparently the trap signal
                 resp.finish()?;
                 Ok(())
             }

@@ -20,6 +20,7 @@ const MEMORY: &'static [u8] = &[
 
 /// This struct implements the debugger access to our target system.
 struct DummyTarget<'a> {
+    eip: u32,
     mem: &'a mut [u8],
 }
 
@@ -36,7 +37,7 @@ impl<'a> StubCalls for DummyTarget<'a> {
             ebp: 0,
             esi: 0,
             edi: 0,
-            eip: 0x10,
+            eip: self.eip,
             eflags: 0,
             cs: 0,
             ss: 0,
@@ -79,6 +80,22 @@ impl<'a> StubCalls for DummyTarget<'a> {
             Err(())
         }
     }
+
+    fn cont(&mut self) {
+        loop {
+            match self.mem[self.eip as usize] {
+                0x90 => self.eip += 1,
+                0xCC => {   // int3
+                    eprintln!("Hit breakpoint! Returning control to debugger.");
+                    break;
+                }
+                invalid => {
+                    eprintln!("Invalid opcode: {:#04X}", invalid);
+                    break;
+                }
+            }
+        }
+    }
 }
 
 fn main() {
@@ -90,6 +107,7 @@ fn main() {
 
     let mut mem = Vec::from(MEMORY);
     let stub = GdbStub::new(stream, DummyTarget {
+        eip: 0x10,
         mem: &mut mem,
     });
 
