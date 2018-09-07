@@ -18,14 +18,12 @@ pub mod targets;
 use comm::*;
 pub use comm::Comm;
 
-use proto::{Command, ParseError};
+use proto::{Command, ParseError, ThreadAction, ThreadId};
 use targets::{EncodeRegister, TargetDesc};
 
 use byteorder::LittleEndian;
 
 use std::{error, mem, str, thread};
-use proto::ThreadId;
-use proto::ThreadAction;
 
 /// This trait provides an interface between GDB and the target program and must
 /// be implemented by the user.
