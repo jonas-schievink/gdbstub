@@ -2,7 +2,8 @@
 
 use Comm;
 
-use byteorder::ByteOrder;
+use byteorder::{ByteOrder, ReadBytesExt};
+use std::io::{self, Read};
 
 macro_rules! def_regs {
     (
@@ -12,17 +13,23 @@ macro_rules! def_regs {
         }
     ) => {
         $( #[$attr] )*
-        #[derive(Debug)]
+        #[derive(Debug, Copy, Clone)]
         pub struct $name {
             $( pub $reg: $t, )+
         }
 
-        impl ::targets::EncodeRegister for $name {
+        impl ::targets::Register for $name {
             fn encode<C: ::Comm, B: ::byteorder::ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
                 $(
                     self.$reg.encode::<C, B>(comm)?;
                 )+
                 Ok(())
+            }
+
+            fn decode<R: ::std::io::Read, B: ::byteorder::ByteOrder>(read: &mut R) -> Result<Self, ::std::io::Error> {
+                Ok(Self {
+                    $( $reg: <$t as ::targets::Register>::decode::<R, B>(read)?, )+
+                })
             }
         }
     };
@@ -33,59 +40,89 @@ pub trait TargetDesc {
     /// A structure containing the target's register values, as expected by GDB.
     ///
     /// These can be extracted from `https://github.com/gergap/binutils-gdb/tree/2b8118237ae25785e3afddafd9c554b1ad03d424/gdb/features`.
-    type Registers: EncodeRegister;
+    type Registers: Register;
 
     /// The target endianness.
     type Endianness: ByteOrder;
 }
 
-/// Trait for register values and structs.
+/// Trait for registers and structs of registers.
 ///
-/// This is used to encode the target-specific register struct so that the
-/// connected debugger can understand it.
-pub trait EncodeRegister {
+/// This is used to encode and decode the target-specific register values.
+pub trait Register: Sized {
     /// Encode the register value(s) of `self` as hexadecimal strings and send
     /// them via `comm`.
     ///
     /// `B` specifies the endianness to use and is set to the target's native
     /// endianness by the library.
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error>;
+
+    /// Decode the register value(s) of `self` from raw bytes.
+    ///
+    /// `data` contains the register content sent by the debugger. It is already
+    /// hex-decoded.
+    ///
+    /// `B` specifies the endianness to use and is set to the target's native
+    /// endianness by the library.
+    fn decode<R: Read, B: ByteOrder>(reader: &mut R) -> Result<Self, io::Error>;
 }
 
-impl EncodeRegister for u32 {
+impl Register for u32 {
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
         let mut buf = [0; 4];
         B::write_u32(&mut buf, *self);
         comm.write_all_hex(&buf)
     }
+
+    fn decode<R: Read, B: ByteOrder>(reader: &mut R) -> Result<Self, io::Error> {
+        Ok(reader.read_u32::<B>()?)
+    }
 }
 
-impl EncodeRegister for u64 {
+impl Register for u64 {
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
         let mut buf = [0; 8];
         B::write_u64(&mut buf, *self);
         comm.write_all_hex(&buf)
     }
+
+    fn decode<R: Read, B: ByteOrder>(reader: &mut R) -> Result<Self, io::Error> {
+        Ok(reader.read_u64::<B>()?)
+    }
 }
 
-impl EncodeRegister for u128 {
+impl Register for u128 {
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
         let mut buf = [0; 16];
         B::write_u128(&mut buf, *self);
         comm.write_all_hex(&buf)
     }
+
+    fn decode<R: Read, B: ByteOrder>(reader: &mut R) -> Result<Self, io::Error> {
+        Ok(reader.read_u128::<B>()?)
+    }
 }
 
-impl EncodeRegister for [u8; 10] {
+impl Register for [u8; 10] {
     fn encode<C: Comm, B: ByteOrder>(&self, comm: &mut C) -> Result<(), C::Error> {
-        // FIXME swap endianness?
+        // FIXME swap endianness
         comm.write_all_hex(self)
+    }
+
+    fn decode<R: Read, B: ByteOrder>(reader: &mut R) -> Result<Self, io::Error> {
+        let mut buf = [0u8; 10];
+        reader.read_exact(&mut buf)?;
+        Ok(buf)
     }
 }
 
 /// Does nothing.
-impl EncodeRegister for () {
+impl Register for () {
     fn encode<C: Comm, B: ByteOrder>(&self, _comm: &mut C) -> Result<(), C::Error> {
+        Ok(())
+    }
+
+    fn decode<R: Read, B: ByteOrder>(_reader: &mut R) -> Result<Self, io::Error> {
         Ok(())
     }
 }

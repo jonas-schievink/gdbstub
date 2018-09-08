@@ -16,6 +16,14 @@ pub trait Comm {
     /// Send a byte to the connected debugger.
     fn write(&mut self, byte: u8) -> Result<(), Self::Error>;
 
+    /// Read `buf.len()` bytes from `self` and stores them in `buf`.
+    fn read_all(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+        for b in buf {
+            *b = self.read()?;
+        }
+        Ok(())
+    }
+
     /// Writes all bytes from a slice to the stream.
     fn write_all(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         for b in data {

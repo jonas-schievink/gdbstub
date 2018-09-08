@@ -20,18 +20,69 @@ const MEMORY: &'static [u8] = &[
 
 /// This struct implements the debugger access to our target system.
 struct DummyTarget<'a> {
-    eip: u32,
+    regs: x86::X86Registers,
     mem: &'a mut [u8],
 }
 
 impl<'a> DummyTarget<'a> {
+    fn new(mem: &'a mut [u8]) -> Self {
+        Self {
+            regs: x86::X86Registers {
+                eax: 0,
+                ebx: 0,
+                ecx: 0,
+                edx: 0,
+                esp: 0,
+                ebp: 0,
+                esi: 0,
+                edi: 0,
+                eip: 0x10,
+                eflags: 0,
+                cs: 0,
+                ss: 0,
+                ds: 0,
+                es: 0,
+                fs: 0,
+                gs: 0,
+
+                st0: [0; 10],
+                st1: [0; 10],
+                st2: [0; 10],
+                st3: [0; 10],
+                st4: [0; 10],
+                st5: [0; 10],
+                st6: [0; 10],
+                st7: [0; 10],
+                fctrl: 0,
+                fstat: 0,
+                ftag: 0,
+                fiseg: 0,
+                fioff: 0,
+                foseg: 0,
+                fooff: 0,
+                fop: !0,
+
+                xmm0: 0,
+                xmm1: 0,
+                xmm2: 0,
+                xmm3: 0,
+                xmm4: 0,
+                xmm5: 0,
+                xmm6: 0,
+                xmm7: 0,
+                mxcsr: !0,
+            },
+            mem,
+        }
+    }
+
     fn step(&mut self) -> bool {    // `true` = stop
         // Do a bit of fake-execution, skipping `nop`s and looping back around
         // the memory. 0xCC = int3, a breakpoint that returns control back to
         // the debugger.
-        match self.mem[self.eip as usize] {
+        match self.mem[self.regs.eip as usize] {
             0x90 => {
-                self.eip = (self.eip + 1) % self.mem.len() as u32;
+                self.regs.eip = (self.regs.eip + 1) % self.mem.len() as u32;
                 false
             },
             0xCC => {   // int3
@@ -50,51 +101,11 @@ impl<'a> StubCalls for DummyTarget<'a> {
     type Target = x86::I386;
 
     fn read_registers(&mut self) -> x86::X86Registers {
-        x86::X86Registers {
-            eax: 0,
-            ebx: 0,
-            ecx: 0,
-            edx: 0,
-            esp: 0,
-            ebp: 0,
-            esi: 0,
-            edi: 0,
-            eip: self.eip,
-            eflags: 0,
-            cs: 0,
-            ss: 0,
-            ds: 0,
-            es: 0,
-            fs: 0,
-            gs: 0,
+        self.regs
+    }
 
-            st0: [0; 10],
-            st1: [0; 10],
-            st2: [0; 10],
-            st3: [0; 10],
-            st4: [0; 10],
-            st5: [0; 10],
-            st6: [0; 10],
-            st7: [0; 10],
-            fctrl: 0,
-            fstat: 0,
-            ftag: 0,
-            fiseg: 0,
-            fioff: 0,
-            foseg: 0,
-            fooff: 0,
-            fop: !0,
-
-            xmm0: 0,
-            xmm1: 0,
-            xmm2: 0,
-            xmm3: 0,
-            xmm4: 0,
-            xmm5: 0,
-            xmm6: 0,
-            xmm7: 0,
-            mxcsr: !0,
-        }
+    fn write_registers(&mut self, regs: x86::X86Registers) {
+        self.regs = regs;
     }
 
     fn read_mem(&mut self, addr: u64) -> Result<u8, ()> {
@@ -131,10 +142,7 @@ fn main() {
     println!("Incoming Connection from {}", addr);
 
     let mut mem = Vec::from(MEMORY);
-    let stub = GdbStub::new(stream, DummyTarget {
-        eip: 0x10,
-        mem: &mut mem,
-    });
+    let stub = GdbStub::new(stream, DummyTarget::new(&mut mem));
 
     match stub.poll() {
         Ok(()) => {}

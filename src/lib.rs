@@ -14,12 +14,13 @@ extern crate byteorder;
 mod comm;
 mod proto;
 pub mod targets;
+mod utils;
 
 use comm::*;
 pub use comm::Comm;
 
 use proto::{Command, ParseError, ThreadAction, ThreadId};
-use targets::{EncodeRegister, TargetDesc};
+use targets::{Register, TargetDesc};
 
 use byteorder::LittleEndian;
 
@@ -37,6 +38,9 @@ pub trait StubCalls {
 
     /// Reads the processor's registers.
     fn read_registers(&mut self) -> <Self::Target as TargetDesc>::Registers;
+
+    /// Writes new values to the processor's registers.
+    fn write_registers(&mut self, regs: <Self::Target as TargetDesc>::Registers);
 
     /// Tries to read a byte from the target system's memory.
     ///
@@ -206,6 +210,17 @@ impl<C: Comm, T: StubCalls> GdbStub<C, T> {
                 let regs = self.target.read_registers();
                 self.write_response(|comm| regs.encode::<_, LittleEndian>(comm))
             },
+            Command::WriteRegisters { raw } => {
+                let mut r = raw;
+                let regs = <T::Target as TargetDesc>::Registers::decode::<_, <T::Target as TargetDesc>::Endianness>(&mut r)
+                    .map_err(Error::comm)?;
+                self.target.write_registers(regs);
+
+                let mut resp = ResponseWriter::new(&mut self.comm)?;
+                resp.write_all(b"OK").map_err(Error::comm)?;
+                resp.finish()?;
+                Ok(())
+            }
             Command::Kill => {
                 self.target.kill();
                 Err(Error::Killed)

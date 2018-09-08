@@ -1,5 +1,6 @@
-use std::{str, u64};
+use utils::{hex_decode_in_place, HexDecodeError};
 
+use std::{str, u64};
 use std::str::Utf8Error;
 use std::num::{ParseIntError, NonZeroU32};
 
@@ -19,6 +20,11 @@ pub enum Command<'a> {
     GetHaltReason,
     /// `g` - Read general processor registers.
     ReadRegisters,
+    /// `G` - Write general processor registers.
+    WriteRegisters {
+        /// Raw undecoded register data.
+        raw: &'a [u8],
+    },
     /// `k` - Kill target program or system and disconnect.
     Kill,
     /// `m` - Read data from memory.
@@ -81,10 +87,7 @@ impl<'a> Command<'a> {
                     // do a little trick to reuse the buffer we were passed
                     // store the decoded bytes in the first part of `bytes`
                     // while decoding 2 bytes (hex digits) at a time
-                    for i in 0..bytes.len()/2 {
-                        bytes[i] = u8::from_str_radix(str::from_utf8(&bytes[i*2..i*2+2])?, 16)?;
-                    }
-                    let bytes = &bytes[..bytes.len()/2];
+                    let bytes = hex_decode_in_place(bytes)?;
 
                     if bytes.len() != len as usize {
                         error!("M command len={}, number of bytes={}", len, bytes.len());
@@ -121,6 +124,11 @@ impl<'a> Command<'a> {
 
                 Ok(Command::Step)
             }
+            b'G' => {
+                // hex-decode the rest of `buf`
+                let raw = hex_decode_in_place(&mut buf[1..])?;
+                Ok(Command::WriteRegisters { raw })
+            },
             // FIXME reject trailing data
             b'?' => Ok(Command::GetHaltReason),
             b'g' => Ok(Command::ReadRegisters),
@@ -174,6 +182,12 @@ impl From<ParseIntError> for ParseError {
 
 impl From<Utf8Error> for ParseError {
     fn from(_: Utf8Error) -> Self {
+        ParseError::Malformed
+    }
+}
+
+impl From<HexDecodeError> for ParseError {
+    fn from(_: HexDecodeError) -> Self {
         ParseError::Malformed
     }
 }
