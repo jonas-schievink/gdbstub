@@ -12,19 +12,21 @@
 extern crate byteorder;
 
 mod comm;
+mod error;
 mod proto;
 pub mod targets;
 mod utils;
 
 use comm::*;
 pub use comm::Comm;
+pub use error::Error;
 
 use proto::{Command, ParseError, ThreadAction, ThreadId};
 use targets::{Register, TargetDesc};
 
 use byteorder::LittleEndian;
 
-use std::{error, mem, str, thread};
+use std::{mem, str, thread};
 
 /// This trait provides an interface between GDB and the target program and must
 /// be implemented by the user.
@@ -352,52 +354,5 @@ impl<C: Comm, T: StubCalls> GdbStub<C, T> {
         str::from_utf8(buf).map_err(|e| {
             Error::unexpected(e.error_len().map(|_| buf[e.valid_up_to()]).unwrap_or(0), "ASCII/UTF-8 string")
         })
-    }
-}
-
-/// The possible errors returned by this library.
-#[derive(Debug)]
-pub enum Error {
-    /// Error during communication.
-    CommError(Box<error::Error + Send + Sync>),
-
-    /// An unexpected byte was received.
-    Unexpected {
-        byte: u8,
-        expected: &'static str,
-    },
-
-    /// Received otherwise malformed data.
-    Malformed,
-
-    /// The packet checksum didn't match.
-    Checksum {
-        received: u8,
-        computed: u8,
-    },
-
-    /// The debugger requested the retransmission of a response, which is not
-    /// yet supported.
-    ///
-    /// Use a reliable communication channel instead.
-    Nack,
-
-    /// Target has been killed.
-    ///
-    /// Prior to returning this error, the library will call `StubCalls::kill`.
-    ///
-    /// This is not a fatal error and just indicates that the debugger closed
-    /// the connection. It is not returned by `GdbStub::poll`, which instead
-    /// returns `Ok(())` when the target is killed.
-    Killed,
-}
-
-impl Error {
-    fn comm<E>(e: E) -> Self where E: Into<Box<error::Error + Send + Sync>> {
-        Error::CommError(e.into())
-    }
-
-    fn unexpected(byte: u8, expected: &'static str) -> Self {
-        Error::Unexpected { byte, expected }
     }
 }
